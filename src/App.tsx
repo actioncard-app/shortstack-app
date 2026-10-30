@@ -3,6 +3,16 @@ import type { Session } from '@supabase/supabase-js'
 import { sb, publicUrl, SUPABASE_URL, SUPABASE_KEY, type Profile, type Video } from './supabase'
 import { BRAND, COMMUNITIES, LIMITS } from './brand'
 import { RULES, ruleTitle } from './rules'
+import { House, Compass, Plus, Inbox, User, Heart, MessageCircle, Share2, Ellipsis, Volume2, VolumeX, ChevronLeft, Flag, Ban, Link2, X, Video as VideoIcon, Upload as UploadIcon, ShieldCheck, Store, HandCoins, Hash, Play } from 'lucide-react'
+
+export function BrandMark({ size = 56 }: { size?: number }) {
+  return <div className="brandmark" style={{ width: size, height: size, borderRadius: size * 0.28 }} aria-hidden><Play size={size * 0.46} fill="#fff" strokeWidth={0} /></div>
+}
+function Skeleton({ kind }: { kind: 'feed' | 'grid' | 'list' }) {
+  if (kind === 'feed') return <div className="sk-feed" aria-label="Loading"><div className="sk sk-rail" /><div className="sk sk-line w60" /><div className="sk sk-line w40" /></div>
+  if (kind === 'grid') return <div className="grid">{Array.from({ length: 6 }, (_, i) => <div key={i} className="cell sk" />)}</div>
+  return <div className="page">{Array.from({ length: 3 }, (_, i) => <div key={i} className="sk sk-card" />)}</div>
+}
 
 // ---------- tiny hash router ----------
 function useRoute() {
@@ -40,7 +50,7 @@ export default function App() {
     return () => sub.subscription.unsubscribe()
   }, [loadMe])
 
-  if (!ready) return <div className="center">Loading…</div>
+  if (!ready) return <div className="app"><Skeleton kind="feed" /></div>
   const parts = route.split('/').filter(Boolean)
   let page: React.ReactNode
   if (parts[0] === 'rules') page = <Rules />
@@ -49,7 +59,8 @@ export default function App() {
   else if (parts[0] === 'new') page = <Upload me={me} />
   else if (parts[0] === 'u' && parts[1]) page = <ProfilePage username={parts[1]} me={me} />
   else if (parts[0] === 'edit') page = <EditProfile me={me} onSaved={() => loadMe(me.id)} />
-  else if (parts[0] === 'notices') page = <Notices me={me} />
+  else if (parts[0] === 'notices' || parts[0] === 'inbox') page = <Notices me={me} />
+  else if (parts[0] === 'discover') page = <Discover tag={parts[1] === 'tag' ? decodeURIComponent(parts[2] ?? '') : ''} community={parts[1] === 'c' ? parts[2] : ''} />
   else if (parts[0] === 'admin') page = me.is_admin ? <Admin /> : <div className="center">Admins only.</div>
   else page = <Feed me={me} />
   return <div className="app">{page}{session && me && <Nav me={me} route={route} />}<Toast /></div>
@@ -58,12 +69,13 @@ export default function App() {
 function Nav({ me, route }: { me: Profile; route: string }) {
   const [n, setN] = useState(0)
   useEffect(() => { sb.from('takedowns').select('id', { count: 'exact', head: true }).eq('creator_id', me.id).eq('appeal_status', 'none').then(({ count }) => setN(count ?? 0)) }, [me.id, route])
-  const a = (p: string) => (route === p || (p !== '/' && route.startsWith(p)) ? 'on' : '')
+  const on = (...ps: string[]) => ps.some(p => p === '/' ? route === '/' : route.startsWith(p)) ? 'on' : ''
   return <nav className="nav">
-    <a className={a('/')} href="#/">Home</a>
-    <a className={'plus ' + a('/new')} href="#/new" aria-label="New clip">＋</a>
-    <a className={a('/notices')} href="#/notices">Notices{n > 0 && <span className="badge">{n}</span>}</a>
-    <a className={a('/u/' + me.username)} href={'#/u/' + me.username}>Me</a>
+    <a className={on('/')} href="#/"><House size={24} strokeWidth={on('/') ? 2.6 : 2} /><span>Home</span></a>
+    <a className={on('/discover')} href="#/discover"><Compass size={24} strokeWidth={on('/discover') ? 2.6 : 2} /><span>Discover</span></a>
+    <a className="create" href="#/new" aria-label="Create"><span className="create-btn"><Plus size={22} strokeWidth={3} /></span></a>
+    <a className={on('/notices', '/inbox')} href="#/inbox"><span className="ico"><Inbox size={24} strokeWidth={on('/notices', '/inbox') ? 2.6 : 2} />{n > 0 && <span className="badge">{n}</span>}</span><span>Inbox</span></a>
+    <a className={on('/u/' + me.username, '/edit')} href={'#/u/' + me.username}><User size={24} strokeWidth={on('/u/' + me.username) ? 2.6 : 2} /><span>Profile</span></a>
   </nav>
 }
 
@@ -88,8 +100,7 @@ function Auth() {
     } catch (x) { setErr((x as Error).message) } finally { setBusy(false) }
   }
   return <div className="auth">
-    <h1 className="logo">{BRAND.logoText}</h1>
-    <p className="muted">{BRAND.tagline}</p>
+    <div className="auth-hero"><BrandMark size={72} /><h1 className="logo">{BRAND.logoText}</h1><p className="muted">{BRAND.tagline}</p></div>
     <form onSubmit={submit}>
       <input aria-label="Email" placeholder="Email" type="email" required value={f.email} onChange={e => set('email', e.target.value)} />
       <input aria-label="Password" placeholder="Password (8+ characters)" type="password" required minLength={8} value={f.password} onChange={e => set('password', e.target.value)} />
@@ -100,8 +111,9 @@ function Auth() {
         <label className="check"><input type="checkbox" checked={f.terms} onChange={e => set('terms', e.target.checked)} /> I agree to the <a href="#/rules" target="_blank">community rules and terms</a></label>
       </>}
       {err && <p className="err" role="alert">{err}</p>}
-      <button className="primary" disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}</button>
+      <button className="primary big" disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}</button>
     </form>
+    <div className="auth-or"><span>or</span></div>
     <button className="link" onClick={() => { setErr(''); setMode(mode === 'login' ? 'signup' : 'login') }}>{mode === 'login' ? "New here? Create an account" : 'Have an account? Log in'}</button>
     <a className="link" href="#/rules">Community rules</a>
   </div>
@@ -137,9 +149,9 @@ function Feed({ me }: { me: Profile }) {
     <div className="tabs">
       <button className={tab === 'following' ? 'on' : ''} onClick={() => setTab('following')}>Following</button>
       <button className={tab === 'foryou' ? 'on' : ''} onClick={() => setTab('foryou')}>For You</button>
-      <button className="mute" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => setMuted(!muted)}>{muted ? '🔇' : '🔊'}</button>
+      <button className="mute glass" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => setMuted(!muted)}>{muted ? <VolumeX size={20} /> : <Volume2 size={20} />}</button>
     </div>
-    {vids === null ? <div className="center">Loading…</div> : vids.length === 0 ? <div className="center">{tab === 'following' ? 'Follow some creators to fill this tab.' : 'No clips yet. Be the first!'}</div> :
+    {vids === null ? <Skeleton kind="feed" /> : vids.length === 0 ? <div className="center">{tab === 'following' ? 'Follow some creators to fill this tab.' : 'No clips yet. Be the first!'}</div> :
       <div className="feed" data-testid="feed">{vids.map(v => <ClipCard key={v.id} v={v} me={me} muted={muted} onGone={load} />)}</div>}
   </div>
 }
@@ -160,10 +172,10 @@ function SingleClip({ id, me }: { id: string; me: Profile | null }) {
       setVids([first as Video, ...((rest ?? []) as Video[]).filter(v => !blocked.has(v.user_id))])
     })()
   }, [id, me?.id])
-  if (vids === undefined) return <div className="center">Loading…</div>
+  if (vids === undefined) return <Skeleton kind="feed" />
   if (!vids) return <div className="center">This clip isn't available. It may have been removed.<br /><a href="#/">Go home</a></div>
   return <div className="feedwrap">
-    <div className="tabs"><a href="#/" className="back">← {BRAND.name}</a><button className="mute" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => setMuted(!muted)}>{muted ? '🔇' : '🔊'}</button></div>
+    <div className="tabs"><a href="#/" className="back glass" aria-label="Back to feed"><ChevronLeft size={22} /></a><span className="tabs-title">{BRAND.name}</span><button className="mute glass" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => setMuted(!muted)}>{muted ? <VolumeX size={20} /> : <Volume2 size={20} />}</button></div>
     <div className="feed" data-testid="feed">{vids.map(v => <ClipCard key={v.id} v={v} me={me} muted={muted} onGone={() => go('/')} />)}</div>
     {!me && <div className="signup-banner"><a href="#/">Log in or sign up</a> to like, comment and follow.</div>}
   </div>
@@ -172,18 +184,45 @@ function SingleClip({ id, me }: { id: string; me: Profile | null }) {
 function ClipCard({ v, me, muted, onGone }: { v: Video; me: Profile | null; muted: boolean; onGone: () => void }) {
   const ref = useRef<HTMLVideoElement>(null)
   const [liked, setLiked] = useState(false)
+  const [pop, setPop] = useState(0)
+  const [burst, setBurst] = useState<{ x: number; y: number; k: number } | null>(null)
+  const [paused, setPaused] = useState(false)
   const [likes, setLikes] = useState(v.likes?.[0]?.count ?? 0)
   const [nComments, setNComments] = useState(v.comments?.[0]?.count ?? 0)
+  const [follows, setFollows] = useState<boolean | null>(null)
   const [sheet, setSheet] = useState<'' | 'comments' | 'more' | 'report'>('')
-  useEffect(() => { if (me) sb.from('likes').select('video_id').eq('video_id', v.id).eq('user_id', me.id).maybeSingle().then(({ data }) => setLiked(!!data)) }, [v.id, me])
+  const lastTap = useRef(0); const tapTimer = useRef<number | undefined>(undefined)
   useEffect(() => {
-    const el = ref.current!; const io = new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > 0.6) el.play().catch(() => {}); else el.pause() }, { threshold: [0, 0.6, 1] })
+    if (!me) return
+    sb.from('likes').select('video_id').eq('video_id', v.id).eq('user_id', me.id).maybeSingle().then(({ data }) => setLiked(!!data))
+    if (me.id !== v.user_id) sb.from('follows').select('follower_id').eq('follower_id', me.id).eq('following_id', v.user_id).maybeSingle().then(({ data }) => setFollows(!!data))
+  }, [v.id, v.user_id, me])
+  useEffect(() => {
+    const el = ref.current!; const io = new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > 0.6) { el.play().catch(() => {}); setPaused(false) } else el.pause() }, { threshold: [0, 0.6, 1] })
     io.observe(el); return () => io.disconnect()
   }, [])
-  async function toggleLike() {
+  async function setLike(next: boolean) {
     if (!me) return go('/')
-    if (liked) { setLiked(false); setLikes(l => l - 1); await sb.from('likes').delete().eq('video_id', v.id).eq('user_id', me.id) }
-    else { setLiked(true); setLikes(l => l + 1); const { error } = await sb.from('likes').insert({ video_id: v.id, user_id: me.id }); if (error) toast(error.message) }
+    if (next === liked) return
+    setLiked(next); setLikes(l => l + (next ? 1 : -1)); if (next) setPop(p => p + 1)
+    const { error } = next ? await sb.from('likes').insert({ video_id: v.id, user_id: me.id }) : await sb.from('likes').delete().eq('video_id', v.id).eq('user_id', me.id)
+    if (error) { toast(error.message); setLiked(!next); setLikes(l => l + (next ? -1 : 1)) }
+  }
+  // Single tap = play/pause; double tap = like (with a heart burst where you tapped).
+  function onTap(e: React.MouseEvent<HTMLDivElement>) {
+    const now = Date.now(); const r = e.currentTarget.getBoundingClientRect()
+    if (now - lastTap.current < 300) {
+      clearTimeout(tapTimer.current); lastTap.current = 0
+      setBurst({ x: e.clientX - r.left, y: e.clientY - r.top, k: now }); setLike(true); return
+    }
+    lastTap.current = now
+    tapTimer.current = window.setTimeout(() => { const el = ref.current!; if (el.paused) { el.play().catch(() => {}); setPaused(false) } else { el.pause(); setPaused(true) } }, 280)
+  }
+  async function follow() {
+    if (!me) return go('/')
+    setFollows(true)
+    const { error } = await sb.from('follows').insert({ follower_id: me.id, following_id: v.user_id })
+    if (error) { setFollows(false); toast(error.message) } else toast(`Following @${v.profiles?.username}`)
   }
   async function share() {
     const url = shareUrl(v.id)
@@ -197,24 +236,33 @@ function ClipCard({ v, me, muted, onGone }: { v: Video; me: Profile | null; mute
   }
   const p = v.profiles
   return <section className="clip" data-testid="clip" data-id={v.id}>
-    <video ref={ref} src={publicUrl(v.video_path)} poster={publicUrl(v.poster_path) || undefined} loop playsInline muted={muted} preload="metadata" onClick={e => { const el = e.currentTarget; if (el.paused) el.play(); else el.pause() }} />
+    <video ref={ref} src={publicUrl(v.video_path)} poster={publicUrl(v.poster_path) || undefined} loop playsInline muted={muted} preload="metadata" />
+    <div className="tapzone" onClick={onTap} />
+    {paused && <div className="paused-ind" aria-hidden><Play size={64} fill="#fff" strokeWidth={0} /></div>}
+    {burst && <Heart key={burst.k} className="burst" style={{ left: burst.x - 48, top: burst.y - 48 }} size={96} fill="var(--like)" strokeWidth={0} onAnimationEnd={() => setBurst(null)} />}
+    <div className="shade" />
     {v.status === 'removed' && <div className="removed-tag">Removed — only you and admins can see this</div>}
     <div className="side">
-      <a href={'#/u/' + p?.username} className="av" aria-label="Creator profile">{p?.avatar_url ? <img src={p.avatar_url} alt="" /> : (p?.display_name || p?.username || '?')[0].toUpperCase()}</a>
-      <button aria-label="Like" aria-pressed={liked} className={liked ? 'liked' : ''} onClick={toggleLike}>❤<span data-testid="like-count">{likes}</span></button>
-      <button aria-label="Comments" onClick={() => setSheet('comments')}>💬<span>{nComments}</span></button>
-      <button aria-label="Share" onClick={share}>↗<span>Share</span></button>
-      <button aria-label="More" onClick={() => setSheet('more')}>⋯</button>
+      <div className="av-wrap">
+        <a href={'#/u/' + p?.username} className="av" aria-label="Creator profile">{p?.avatar_url ? <img src={p.avatar_url} alt="" /> : (p?.display_name || p?.username || '?')[0].toUpperCase()}</a>
+        {me && follows === false && <button className="av-follow" aria-label={`Follow @${p?.username}`} onClick={follow}><Plus size={14} strokeWidth={3.5} /></button>}
+      </div>
+      <button aria-label="Like" aria-pressed={liked} className={'rail-btn ' + (liked ? 'liked' : '')} onClick={() => setLike(!liked)}>
+        <Heart key={pop} className={pop && liked ? 'pop' : ''} size={32} fill={liked ? 'var(--like)' : 'rgba(255,255,255,.12)'} color={liked ? 'var(--like)' : '#fff'} strokeWidth={liked ? 0 : 2} />
+        <span data-testid="like-count">{likes}</span></button>
+      <button aria-label="Comments" className="rail-btn" onClick={() => setSheet('comments')}><MessageCircle size={30} fill="rgba(255,255,255,.12)" /><span>{nComments}</span></button>
+      <button aria-label="Share" className="rail-btn" onClick={share}><Share2 size={28} /><span>Share</span></button>
+      <button aria-label="More" className="rail-btn" onClick={() => setSheet('more')}><Ellipsis size={28} /></button>
     </div>
     <div className="meta">
-      <a href={'#/u/' + p?.username}><b>@{p?.username}</b></a>{v.is_demo && <span className="demo">DEMO</span>}
-      <p>{v.caption} {v.hashtags.map(h => <span key={h} className="tag">#{h} </span>)}</p>
+      <a href={'#/u/' + p?.username} className="meta-user"><b>@{p?.username}</b></a>{v.is_demo && <span className="demo">DEMO</span>}
+      <p>{v.caption} {v.hashtags.map(h => <a key={h} className="tag" href={'#/discover/tag/' + encodeURIComponent(h)}>#{h} </a>)}</p>
     </div>
     {sheet === 'comments' && <Comments v={v} me={me} onClose={() => setSheet('')} onCount={setNComments} />}
     {sheet === 'more' && <Sheet onClose={() => setSheet('')} title="Options">
-      <button className="row" onClick={() => setSheet('report')}>⚑ Report this clip</button>
-      {me && me.id !== v.user_id && <button className="row" onClick={block}>⛔ Block @{p?.username}</button>}
-      <button className="row" onClick={() => { navigator.clipboard?.writeText(shareUrl(v.id)); toast('Link copied'); setSheet('') }}>🔗 Copy link</button>
+      <button className="row" onClick={() => setSheet('report')}><Flag size={20} /> Report this clip</button>
+      {me && me.id !== v.user_id && <button className="row" onClick={block}><Ban size={20} /> Block @{p?.username}</button>}
+      <button className="row" onClick={() => { navigator.clipboard?.writeText(shareUrl(v.id)); toast('Link copied'); setSheet('') }}><Link2 size={20} /> Copy link</button>
     </Sheet>}
     {sheet === 'report' && <ReportSheet v={v} me={me} onClose={() => setSheet('')} />}
   </section>
@@ -224,7 +272,7 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   // Ignore the tap that opened the sheet (mobile Safari can deliver a trailing click to the new backdrop).
   const opened = useRef(Date.now())
   return <div className="sheet-bg" onClick={e => { if (e.target === e.currentTarget && Date.now() - opened.current > 400) onClose() }}><div className="sheet" onClick={e => e.stopPropagation()} role="dialog" aria-label={title}>
-    <div className="sheet-h"><b>{title}</b><button aria-label="Close" onClick={onClose}>✕</button></div>{children}</div></div>
+    <div className="grabber" /><div className="sheet-h"><b>{title}</b><button aria-label="Close" onClick={onClose}><X size={20} /></button></div>{children}</div></div>
 }
 
 type C = { id: string; body: string; created_at: string; user_id: string; profiles: { username: string } }
@@ -340,7 +388,7 @@ function Upload({ me }: { me: Profile }) {
     } catch (x) { setErr((x as Error).message) } finally { setBusy('') }
   }
   return <div className="page">
-    <h2>New clip</h2>
+    <h2 className="h">New clip</h2>
     {rec ? <div className="rec">
       <video ref={live} muted playsInline className="preview" />
       {rec.mr ? <button className="primary" onClick={() => rec.mr!.stop()}>■ Stop ({rec.secs}s / {LIMITS.maxSeconds}s)</button> : <button className="primary" onClick={start}>● Start recording</button>}
@@ -351,8 +399,9 @@ function Upload({ me }: { me: Profile }) {
       <button className="primary" disabled={!!busy} onClick={post}>{busy || 'Post'}</button>
       <button className="link" onClick={() => { setBlob(null); setPreview('') }}>Start over</button>
     </> : <div className="choose">
-      <button className="primary" onClick={openCam}>🎥 Record with camera</button>
-      <label className="btn">📁 Choose a video<input type="file" accept="video/*" hidden data-testid="file" onChange={e => e.target.files?.[0] && useBlob(e.target.files[0])} /></label>
+      <div className="create-hero"><BrandMark size={56} /><h3>Make something worth watching</h3></div>
+      <button className="primary big" onClick={openCam}><VideoIcon size={20} /> Record with camera</button>
+      <label className="btn big"><UploadIcon size={20} /> Choose a video<input type="file" accept="video/*" hidden data-testid="file" onChange={e => e.target.files?.[0] && useBlob(e.target.files[0])} /></label>
       <p className="muted">Up to {LIMITS.maxSeconds} seconds and 25 MB. Make sure it follows the <a href="#/rules">rules</a>.</p>
     </div>}
     {err && <p className="err" role="alert">{err}</p>}
@@ -379,7 +428,7 @@ function ProfilePage({ username, me }: { username: string; me: Profile }) {
     setVids((v.data ?? []) as Video[]); setCounts({ followers: a.count ?? 0, following: b.count ?? 0 }); setFollowing(!!f.data); setBlocked(!!bl.data)
   }, [username, me.id])
   useEffect(() => { load() }, [load])
-  if (p === undefined) return <div className="center">Loading…</div>
+  if (p === undefined) return <div className="page profile"><div className="phead"><div className="av big sk" /><div className="sk sk-line w40 c" /></div><Skeleton kind="grid" /></div>
   if (!p) return <div className="center">No such user.</div>
   const mine = p.id === me.id
   async function toggleFollow() {
@@ -395,19 +444,19 @@ function ProfilePage({ username, me }: { username: string; me: Profile }) {
       <div className="av big">{p.avatar_url ? <img src={p.avatar_url} alt="" /> : (p.display_name || p.username)[0].toUpperCase()}</div>
       <h2>{p.display_name || p.username}{p.is_demo && <span className="demo">DEMO</span>}</h2>
       <div className="muted">@{p.username}</div>
-      <div className="stats"><span><b data-testid="followers">{counts.followers}</b> followers</span><span><b>{counts.following}</b> following</span><span><b>{vids.filter(v => v.status === 'active').length}</b> clips</span></div>
+      <div className="stats"><span><b data-testid="followers">{counts.followers}</b>Followers</span><span><b>{counts.following}</b>Following</span><span><b>{vids.filter(v => v.status === 'active').length}</b>Clips</span></div>
       {p.bio && <p>{p.bio}</p>}
       <div className="chips">{p.communities.map(c => <span key={c} className="chip">{COMMUNITIES.find(x => x.id === c)?.label ?? c}</span>)}</div>
-      {mine ? <div className="row-btns"><a className="btn" href="#/edit">Edit profile</a>{me.is_admin && <a className="btn" href="#/admin">Admin review</a>}<button className="btn" onClick={async () => { await sb.auth.signOut(); go('/') }}>Log out</button></div>
+      {mine ? <div className="row-btns"><a className="btn" href="#/edit">Edit profile</a>{me.is_admin && <a className="btn" href="#/admin"><ShieldCheck size={16} /> Admin review</a>}<button className="btn" onClick={async () => { await sb.auth.signOut(); go('/') }}>Log out</button></div>
         : <div className="row-btns"><button className={following ? 'btn' : 'primary'} onClick={toggleFollow}>{following ? 'Unfollow' : 'Follow'}</button><button className="btn" onClick={toggleBlock}>{blocked ? 'Unblock' : 'Block'}</button></div>}
     </div>
     <div className="shop" data-testid="shop">
-      <b>🛍 Shop & tips — coming soon</b>
+      <div className="shop-h"><Store size={18} /><b>Shop & tips</b><span className="soon">Coming soon</span></div>
       <p className="muted">Creators will be able to sell items and get tips here, with a fairer pay split. <b>Not live yet. No real money moves.</b></p>
-      <div className="row-btns"><button className="btn" disabled>Send a tip (coming soon)</button><button className="btn" disabled>Visit shop (coming soon)</button></div>
+      <div className="row-btns"><button className="btn" disabled><HandCoins size={16} /> Send a tip (coming soon)</button><button className="btn" disabled><Store size={16} /> Visit shop (coming soon)</button></div>
     </div>
     {blocked ? <p className="muted center">You blocked this user.</p> : <div className="grid">{vids.map(v => <a key={v.id} href={'#/v/' + v.id} className="cell">
-      {v.poster_path ? <img src={publicUrl(v.poster_path)} alt={v.caption} /> : <video src={publicUrl(v.video_path)} muted preload="metadata" />}
+      {v.poster_path ? <img src={publicUrl(v.poster_path)} alt={v.caption} loading="lazy" /> : <video src={publicUrl(v.video_path)} muted preload="metadata" />}<span className="cell-play"><Play size={12} fill="#fff" strokeWidth={0} /></span>
       {v.status === 'removed' && <span className="removed-tag">Removed</span>}</a>)}</div>}
     <p className="foot"><a href="#/rules">Community rules</a></p>
   </div>
@@ -431,13 +480,13 @@ function EditProfile({ me, onSaved }: { me: Profile; onSaved: () => void }) {
   }
   const tog = (c: string) => setF({ ...f, communities: f.communities.includes(c) ? f.communities.filter(x => x !== c) : [...f.communities, c] })
   return <div className="page">
-    <h2>Edit profile</h2>
+    <h2 className="h">Edit profile</h2>
     <label className="btn">Change photo<input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && avatar(e.target.files[0])} /></label>
     {f.avatar_url && <img src={f.avatar_url} className="av big" alt="avatar" />}
     <input aria-label="Display name" placeholder="Display name" maxLength={50} value={f.display_name} onChange={e => setF({ ...f, display_name: e.target.value })} />
     <textarea aria-label="Bio" placeholder="Bio" maxLength={300} value={f.bio} onChange={e => setF({ ...f, bio: e.target.value })} />
     <p className="muted">Your communities</p>
-    <div className="chips">{COMMUNITIES.map(c => <button key={c.id} className={'chip ' + (f.communities.includes(c.id) ? 'on' : '')} onClick={() => tog(c.id)}>{c.label}</button>)}</div>
+    <div className="chips">{COMMUNITIES.map(c => <button key={c.id} className={'chip ' + (f.communities.includes(c.id) ? 'on' : '')} onClick={() => tog(c.id)}>{c.emoji} {c.label}</button>)}</div>
     <button className="primary" disabled={busy} onClick={save}>Save</button>
   </div>
 }
@@ -445,8 +494,8 @@ function EditProfile({ me, onSaved }: { me: Profile; onSaved: () => void }) {
 // ---------- rules ----------
 function Rules() {
   return <div className="page">
-    <a href="#/">← Back</a>
-    <h2>{BRAND.name} community rules</h2>
+    <a href="#/" className="backlink"><ChevronLeft size={18} /> Back</a>
+    <h2 className="h">{BRAND.name} community rules</h2>
     <p>Plain rules, real reasons. If we ever take a clip down, we'll tell you <b>which clip</b>, <b>which rule</b>, and <b>why</b> — and you can appeal with one tap. A person reads every appeal.</p>
     <ol className="rules">{RULES.map(r => <li key={r.id}><b>{r.title}.</b> <span className="muted">Why: {r.why}</span></li>)}</ol>
     <h3>Terms (short version)</h3>
@@ -469,8 +518,9 @@ function Notices({ me }: { me: Profile }) {
     if (error) return toast(error.message); toast('Appeal sent. A person will review it.'); setOpen(''); setT(''); load()
   }
   return <div className="page">
-    <h2>Notices</h2>
-    {list === null ? <p>Loading…</p> : list.length === 0 ? <p className="muted">Nothing here. When something happens to your clips, you'll see it here with the exact reason.</p> :
+    <h2 className="h">Inbox</h2>
+    <p className="muted sub">Notices about your clips, with the exact rule and reason.</p>
+    {list === null ? <Skeleton kind="list" /> : list.length === 0 ? <p className="muted">Nothing here. When something happens to your clips, you'll see it here with the exact reason.</p> :
       list.map(n => <div key={n.id} className="notice" data-testid="notice">
         <b>Your clip was removed</b>
         <p>Clip: “{n.videos?.caption || '(no caption)'}” posted {new Date(n.videos?.created_at).toLocaleDateString()} — <a href={'#/v/' + n.video_id}>view</a></p>
@@ -509,7 +559,7 @@ function Admin() {
     const { error } = await sb.rpc('decide_appeal', { p_takedown: id, p_restore: restore, p_response: resp }); toast(error ? error.message : 'Done'); load()
   }
   return <div className="page">
-    <h2>Admin review</h2>
+    <h2 className="h"><ShieldCheck size={22} /> Admin review</h2>
     <h3>Open reports ({byVideo.size} clips)</h3>
     {byVideo.size === 0 && <p className="muted">No open reports.</p>}
     {[...byVideo.entries()].map(([vid, rs]) => { const v = rs[0].videos; const f = form[vid] ?? { rule: rs[0].rule, reason: '' }; return <div key={vid} className="notice" data-testid="report-item">
@@ -525,5 +575,40 @@ function Admin() {
       <p>Clip “{a.videos?.caption}” — <a href={'#/v/' + a.video_id}>view</a></p><p>Rule: <b>{ruleTitle(a.rule)}</b>. Reason given: {a.reason}</p><p>Creator says: “{a.appeal_text}”</p>
       <div className="row-btns"><button className="primary" onClick={() => decide(a.id, true)}>Restore clip</button><button className="btn" onClick={() => decide(a.id, false)}>Keep removed</button></div>
     </div>)}
+  </div>
+}
+
+// ---------- discover ----------
+function Discover({ tag, community }: { tag: string; community: string }) {
+  const [tags, setTags] = useState<[string, number][] | null>(null)
+  const [vids, setVids] = useState<Video[] | null>(null)
+  useEffect(() => {
+    setVids(null)
+    ;(async () => {
+      let q = sb.from('videos').select('*, profiles!videos_user_id_fkey(communities)').eq('status', 'active').order('created_at', { ascending: false }).limit(200)
+      if (tag) q = q.contains('hashtags', [tag])
+      const { data } = await q
+      let list = (data ?? []) as Video[]
+      if (community) list = list.filter(v => v.profiles?.communities?.includes(community) || v.hashtags.includes(community))
+      setVids(list.slice(0, 60))
+      if (!tag && !community) {
+        const m = new Map<string, number>(); list.forEach(v => v.hashtags.forEach(h => m.set(h, (m.get(h) ?? 0) + 1)))
+        setTags([...m.entries()].filter(([h]) => !['demo', 'e2etest'].includes(h)).sort((a, b) => b[1] - a[1]).slice(0, 12))
+      }
+    })()
+  }, [tag, community])
+  const title = tag ? '#' + tag : community ? COMMUNITIES.find(c => c.id === community)?.label : 'Discover'
+  return <div className="page">
+    {(tag || community) && <a href="#/discover" className="backlink"><ChevronLeft size={18} /> Discover</a>}
+    <h2 className="h">{title}</h2>
+    {!tag && !community && <>
+      <p className="muted sub">Starter communities</p>
+      <div className="comm-grid">{COMMUNITIES.map(c => <a key={c.id} href={'#/discover/c/' + c.id} className={'comm comm-' + c.id}><span className="comm-emoji">{c.emoji}</span><b>{c.label}</b></a>)}</div>
+      <p className="muted sub">Trending hashtags</p>
+      <div className="chips left">{tags === null ? <div className="sk sk-line w60" /> : tags.length === 0 ? <span className="muted">No hashtags yet.</span> : tags.map(([h, n]) => <a key={h} className="chip" href={'#/discover/tag/' + encodeURIComponent(h)}><Hash size={13} />{h} <span className="muted">{n}</span></a>)}</div>
+      <p className="muted sub">Latest clips</p>
+    </>}
+    {vids === null ? <Skeleton kind="grid" /> : vids.length === 0 ? <p className="muted">No clips here yet.</p> :
+      <div className="grid">{vids.map(v => <a key={v.id} href={'#/v/' + v.id} className="cell">{v.poster_path ? <img src={publicUrl(v.poster_path)} alt={v.caption} loading="lazy" /> : <video src={publicUrl(v.video_path)} muted preload="metadata" />}<span className="cell-play"><Play size={12} fill="#fff" strokeWidth={0} /></span></a>)}</div>}
   </div>
 }

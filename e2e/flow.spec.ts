@@ -30,7 +30,7 @@ async function signup(page: Page, who: { email: string; user: string }) {
 // Wait for the single-clip view itself (its back link), not just a matching first clip in the old feed.
 async function openClip(page: Page, id: string) {
   await page.goto(`./#/v/${id}`)
-  await expect(page.getByRole('link', { name: /←/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Back to feed' })).toBeVisible()
   await expect(page.getByTestId('clip').first()).toHaveAttribute('data-id', id)
 }
 async function login(page: Page, email: string, pw: string) {
@@ -51,7 +51,7 @@ test('sign up (18+ gate) and upload a clip', async ({ page }) => {
   await page.goto('./#/'); await shot(page, '01-login')
   await signup(page, A)
   await shot(page, '02-feed')
-  await page.getByRole('link', { name: 'New clip' }).click()
+  await page.getByRole('link', { name: 'Create' }).click()
   await page.getByTestId('file').setInputFiles(path.join(import.meta.dirname, 'e2e-sample.webm'))
   await page.getByLabel('Caption').fill('E2E test clip, safe to delete #e2etest')
   await shot(page, '03-upload')
@@ -65,7 +65,7 @@ test('sign up (18+ gate) and upload a clip', async ({ page }) => {
 test('record with (fake) camera', async ({ page, browserName }) => {
   test.skip(browserName === 'webkit', 'Playwright WebKit has no fake-camera flag; recording is covered on Chromium only')
   await login(page, A.email, PW)
-  await page.getByRole('link', { name: 'New clip' }).click()
+  await page.getByRole('link', { name: 'Create' }).click()
   await page.getByRole('button', { name: /Record with camera/ }).click()
   await page.getByRole('button', { name: /Start recording/ }).click()
   await page.waitForTimeout(3500)
@@ -216,4 +216,29 @@ test('single clip and share link keep swiping up/down', async ({ page, browser }
   await anon.goto(`./#/v/${id}`)
   await checkSwipes(anon, id!)
   await ctx.close()
+})
+
+test('discover: communities, hashtags, tab bar; double-tap likes', async ({ page }) => {
+  await login(page, A.email, PW)
+  for (const t of ['Home', 'Discover', 'Inbox', 'Profile']) await expect(page.locator('nav').getByRole('link', { name: t })).toBeVisible()
+  await page.locator('nav').getByRole('link', { name: 'Discover' }).click()
+  await expect(page.getByRole('heading', { name: 'Discover' })).toBeVisible()
+  await page.getByRole('link', { name: /Appalachia/ }).first().click()
+  await expect(page.getByRole('heading', { name: 'Appalachia' })).toBeVisible()
+  await expect(page.locator('a.cell').first()).toBeVisible()
+  await page.goto('./#/discover/tag/travel'); await expect(page.getByRole('heading', { name: '#travel' })).toBeVisible()
+  await expect(page.locator('a.cell').first()).toBeVisible()
+  // double-tap the open clip to like it
+  await page.locator('a.cell').first().click()
+  await expect(page.getByRole('link', { name: 'Back to feed' })).toBeVisible()
+  const first = page.getByTestId('clip').first()
+  const before = Number(await first.getByTestId('like-count').innerText())
+  const liked = await first.getByRole('button', { name: 'Like' }).getAttribute('aria-pressed')
+  if (liked === 'true') { await first.getByRole('button', { name: 'Like' }).click(); await expect(first.getByTestId('like-count')).toHaveText(String(before - 1)) }
+  const base = Number(await first.getByTestId('like-count').innerText())
+  await first.locator('.tapzone').dblclick({ position: { x: 150, y: 300 } })
+  await expect(first.getByRole('button', { name: 'Like' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(first.getByTestId('like-count')).toHaveText(String(base + 1))
+  await first.getByRole('button', { name: 'Like' }).click() // undo, keep demo data clean
+  await expect(first.getByTestId('like-count')).toHaveText(String(base))
 })
