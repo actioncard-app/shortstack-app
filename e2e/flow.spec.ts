@@ -232,6 +232,7 @@ test('discover: communities, hashtags, tab bar; double-tap likes', async ({ page
   await page.locator('a.cell').first().click()
   await expect(page.getByRole('link', { name: 'Back to feed' })).toBeVisible()
   const first = page.getByTestId('clip').first()
+  await page.waitForLoadState('networkidle'); await page.waitForTimeout(800)
   const before = Number(await first.getByTestId('like-count').innerText())
   const liked = await first.getByRole('button', { name: 'Like' }).getAttribute('aria-pressed')
   if (liked === 'true') { await first.getByRole('button', { name: 'Like' }).click(); await expect(first.getByTestId('like-count')).toHaveText(String(before - 1)) }

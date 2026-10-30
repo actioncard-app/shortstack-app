@@ -201,10 +201,11 @@ function ClipCard({ v, me, muted, onGone }: { v: Video; me: Profile | null; mute
     const el = ref.current!; const io = new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > 0.6) { el.play().catch(() => {}); setPaused(false) } else el.pause() }, { threshold: [0, 0.6, 1] })
     io.observe(el); return () => io.disconnect()
   }, [])
+  const likedRef = useRef(false); likedRef.current = liked
   async function setLike(next: boolean) {
     if (!me) return go('/')
-    if (next === liked) return
-    setLiked(next); setLikes(l => l + (next ? 1 : -1)); if (next) setPop(p => p + 1)
+    if (next === likedRef.current) return
+    likedRef.current = next; setLiked(next); setLikes(l => l + (next ? 1 : -1)); if (next) setPop(p => p + 1)
     const { error } = next ? await sb.from('likes').insert({ video_id: v.id, user_id: me.id }) : await sb.from('likes').delete().eq('video_id', v.id).eq('user_id', me.id)
     if (error) { toast(error.message); setLiked(!next); setLikes(l => l + (next ? -1 : 1)) }
   }
