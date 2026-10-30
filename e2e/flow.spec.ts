@@ -4,7 +4,7 @@ import path from 'node:path'
 
 // Passwords for seeded accounts come from .env.test (git-ignored), never from the repo.
 const env = Object.fromEntries(fs.readFileSync(path.join(import.meta.dirname, '..', '.env.test'), 'utf8').trim().split('\n').map(l => l.split('=')))
-const SHOTS = path.join(import.meta.dirname, '..', 'screenshots')
+const SHOTS = path.join(import.meta.dirname, '..', 'screenshots', process.env.BASE_URL ? 'live' : '')
 const run = Date.now().toString(36)
 const shot = (page: Page, name: string) => page.screenshot({ path: path.join(SHOTS, `${test.info().project.name}-${name}.png`) })
 
