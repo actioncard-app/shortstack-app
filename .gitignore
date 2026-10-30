@@ -1,0 +1,8 @@
+node_modules
+dist
+TEST-ACCOUNTS.txt
+.env*
+test-results
+playwright-report
+seed/*.mp4
+seed/*.jpg
