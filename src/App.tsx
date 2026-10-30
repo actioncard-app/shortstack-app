@@ -144,15 +144,27 @@ function Feed({ me }: { me: Profile }) {
   </div>
 }
 
+// Opening one clip (tap, profile grid, or share link) shows that clip first, then the rest of the
+// feed below it, in the same scroll-snap container, so swiping keeps working.
 function SingleClip({ id, me }: { id: string; me: Profile | null }) {
-  const [v, setV] = useState<Video | null | undefined>(undefined)
+  const [vids, setVids] = useState<Video[] | null | undefined>(undefined)
   const [muted, setMuted] = useState(true)
-  useEffect(() => { sb.from('videos').select(VIDEO_SELECT).eq('id', id).maybeSingle().then(({ data }) => setV(data as Video | null)) }, [id])
-  if (v === undefined) return <div className="center">Loading…</div>
-  if (!v) return <div className="center">This clip isn't available. It may have been removed.<br /><a href="#/">Go home</a></div>
+  useEffect(() => {
+    (async () => {
+      const [{ data: first }, { data: rest }, blocked] = await Promise.all([
+        sb.from('videos').select(VIDEO_SELECT).eq('id', id).maybeSingle(),
+        sb.from('videos').select(VIDEO_SELECT).eq('status', 'active').neq('id', id).order('created_at', { ascending: false }).limit(50),
+        myBlocks(me?.id),
+      ])
+      if (!first) { setVids(null); return }
+      setVids([first as Video, ...((rest ?? []) as Video[]).filter(v => !blocked.has(v.user_id))])
+    })()
+  }, [id, me?.id])
+  if (vids === undefined) return <div className="center">Loading…</div>
+  if (!vids) return <div className="center">This clip isn't available. It may have been removed.<br /><a href="#/">Go home</a></div>
   return <div className="feedwrap">
     <div className="tabs"><a href="#/" className="back">← {BRAND.name}</a><button className="mute" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => setMuted(!muted)}>{muted ? '🔇' : '🔊'}</button></div>
-    <div className="feed"><ClipCard v={v} me={me} muted={muted} onGone={() => go('/')} /></div>
+    <div className="feed" data-testid="feed">{vids.map(v => <ClipCard key={v.id} v={v} me={me} muted={muted} onGone={() => go('/')} />)}</div>
     {!me && <div className="signup-banner"><a href="#/">Log in or sign up</a> to like, comment and follow.</div>}
   </div>
 }
@@ -209,7 +221,9 @@ function ClipCard({ v, me, muted, onGone }: { v: Video; me: Profile | null; mute
 }
 
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return <div className="sheet-bg" onClick={onClose}><div className="sheet" onClick={e => e.stopPropagation()} role="dialog" aria-label={title}>
+  // Ignore the tap that opened the sheet (mobile Safari can deliver a trailing click to the new backdrop).
+  const opened = useRef(Date.now())
+  return <div className="sheet-bg" onClick={e => { if (e.target === e.currentTarget && Date.now() - opened.current > 400) onClose() }}><div className="sheet" onClick={e => e.stopPropagation()} role="dialog" aria-label={title}>
     <div className="sheet-h"><b>{title}</b><button aria-label="Close" onClick={onClose}>✕</button></div>{children}</div></div>
 }
 

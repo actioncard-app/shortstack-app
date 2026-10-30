@@ -2,7 +2,7 @@
 a{color:var(--accent)}button{font:inherit;cursor:pointer}
 input,textarea,select{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #333;background:var(--surface);color:var(--text);font:inherit}
 textarea{min-height:80px}
-.app{height:100%;max-width:560px;margin:0 auto;position:relative}
+.app{height:100%;height:100dvh;max-width:560px;margin:0 auto;position:relative}
 .center{display:flex;flex-direction:column;align-items:center;justify-content:center;height:80vh;text-align:center;padding:20px;gap:8px}
 .muted{color:var(--muted)}.err{color:#ff7b7b}
 .primary{background:var(--primary);color:#fff;border:0;border-radius:10px;padding:12px 16px;font-weight:600;margin:6px 0}
@@ -16,10 +16,10 @@ textarea{min-height:80px}
 .logo{font-size:40px;margin:0;color:var(--primary);letter-spacing:-1px}
 .check{display:flex;gap:8px;align-items:center;margin:8px 0}.check input{width:auto;margin:0}
 .feedwrap{height:100%;position:relative}
-.feed{height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none}
+.feed{height:100%;overflow-y:scroll;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y;scroll-snap-type:y mandatory;scrollbar-width:none}
 .feed::-webkit-scrollbar{display:none}
 .clip{height:100%;scroll-snap-align:start;scroll-snap-stop:always;position:relative;background:#000}
-.clip video{width:100%;height:100%;object-fit:cover;display:block}
+.clip video{touch-action:pan-y;width:100%;height:100%;object-fit:cover;display:block}
 .tabs{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;justify-content:center;gap:16px;padding:calc(env(safe-area-inset-top) + 10px) 10px 10px;background:linear-gradient(#000a,#0000)}
 .tabs button{background:none;border:0;color:#fffa;font-weight:600;font-size:16px}.tabs button.on{color:#fff;border-bottom:2px solid #fff}
 .tabs .mute{position:absolute;right:12px}.tabs .back{position:absolute;left:12px;color:#fff;text-decoration:none}

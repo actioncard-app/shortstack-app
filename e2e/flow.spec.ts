@@ -27,6 +27,12 @@ async function signup(page: Page, who: { email: string; user: string }) {
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page.getByTestId('feed')).toBeVisible({ timeout: 20000 })
 }
+// Wait for the single-clip view itself (its back link), not just a matching first clip in the old feed.
+async function openClip(page: Page, id: string) {
+  await page.goto(`./#/v/${id}`)
+  await expect(page.getByRole('link', { name: /←/ })).toBeVisible()
+  await expect(page.getByTestId('clip').first()).toHaveAttribute('data-id', id)
+}
 async function login(page: Page, email: string, pw: string) {
   await page.goto('./#/')
   await page.getByLabel('Email').fill(email); await page.getByLabel('Password').fill(pw)
@@ -34,7 +40,7 @@ async function login(page: Page, email: string, pw: string) {
   await expect(page.getByText('For You')).toBeVisible({ timeout: 20000 })
 }
 async function fresh(browser: Browser, opts = test.info().project.use) {
-  const ctx = await browser.newContext({ ...opts, permissions: ['camera', 'microphone', 'clipboard-read', 'clipboard-write'] })
+  const ctx = await browser.newContext({ ...opts })
   return { ctx, page: await ctx.newPage() }
 }
 
@@ -52,11 +58,12 @@ test('sign up (18+ gate) and upload a clip', async ({ page }) => {
   await page.getByRole('button', { name: 'Post' }).click()
   await page.waitForURL(/#\/v\//, { timeout: 60000 })
   clipId = page.url().split('#/v/')[1]
-  await expect(page.getByTestId('clip')).toBeVisible()
+  await expect(page.getByTestId('clip').first()).toBeVisible()
   await expect.poll(() => page.locator('video').first().evaluate((v: HTMLVideoElement) => v.currentTime), { timeout: 15000 }).toBeGreaterThan(0)
 })
 
-test('record with (fake) camera', async ({ page }) => {
+test('record with (fake) camera', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit', 'Playwright WebKit has no fake-camera flag; recording is covered on Chromium only')
   await login(page, A.email, PW)
   await page.getByRole('link', { name: 'New clip' }).click()
   await page.getByRole('button', { name: /Record with camera/ }).click()
@@ -67,7 +74,7 @@ test('record with (fake) camera', async ({ page }) => {
   await page.getByLabel('Caption').fill('E2E camera recording #e2etest')
   await page.getByRole('button', { name: 'Post' }).click()
   await page.waitForURL(/#\/v\//, { timeout: 60000 })
-  await expect(page.getByTestId('clip')).toBeVisible()
+  await expect(page.getByTestId('clip').first()).toBeVisible()
 })
 
 test('feed swipe autoplays next clip; like + comment persist', async ({ page }) => {
@@ -75,22 +82,22 @@ test('feed swipe autoplays next clip; like + comment persist', async ({ page }) 
   const feed = page.getByTestId('feed')
   await expect(page.getByTestId('clip').nth(2)).toBeAttached()
   const clips = page.getByTestId('clip')
-  await page.mouse.move(150, 300); await page.mouse.wheel(0, 900); await page.waitForTimeout(1500)
+  await swipe(page, 1)
   expect(await feed.evaluate(e => e.scrollTop)).toBeGreaterThan(300)
   const second = clips.nth(1).locator('video')
   await expect.poll(() => second.evaluate((v: HTMLVideoElement) => !v.paused), { timeout: 10000 }).toBe(true)
   expect(await clips.nth(0).locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true)
   await shot(page, '05-feed-swiped')
 
-  await page.goto(`./#/v/${clipId}`)
-  const likeBtn = page.getByRole('button', { name: 'Like' })
-  await expect(page.getByTestId('like-count')).toHaveText('0')
-  await likeBtn.click(); await expect(page.getByTestId('like-count')).toHaveText('1')
+  await openClip(page, clipId)
+  const likeBtn = page.getByRole('button', { name: 'Like' }).first()
+  await expect(page.getByTestId('like-count').first()).toHaveText('0')
+  await likeBtn.click(); await expect(page.getByTestId('like-count').first()).toHaveText('1')
   await page.waitForTimeout(800); await page.reload()
-  await expect(page.getByRole('button', { name: 'Like' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByTestId('like-count')).toHaveText('1')
+  await expect(page.getByRole('button', { name: 'Like' }).first()).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('like-count').first()).toHaveText('1')
 
-  await page.getByRole('button', { name: 'Comments' }).click()
+  await page.getByRole('button', { name: 'Comments' }).first().click()
   await page.getByLabel('Add comment').fill('First! (e2e)')
   await page.getByRole('button', { name: 'Post' }).click()
   await expect(page.getByTestId('comment')).toContainText('First! (e2e)')
@@ -117,17 +124,16 @@ test('follow creator, Following tab, profile + shop placeholder', async ({ page 
 
 test('share link opens the single clip when logged out', async ({ browser }) => {
   const { ctx, page } = await fresh(browser)
-  await page.goto(`./#/v/${clipId}`)
-  await expect(page.getByTestId('clip')).toHaveAttribute('data-id', clipId)
-  await expect(page.getByText('E2E test clip')).toBeVisible()
+  await openClip(page, clipId)
+  await expect(page.getByText('E2E test clip').first()).toBeVisible()
   await shot(page, '08-share-link'); await ctx.close()
 })
 
 test('report -> admin takedown -> creator notice -> appeal -> restore', async ({ browser }) => {
   // B reports A's clip
   const b = await fresh(browser); await signup(b.page, B)
-  await b.page.goto(`./#/v/${clipId}`)
-  await b.page.getByRole('button', { name: 'More' }).click()
+  await openClip(b.page, clipId)
+  await b.page.getByRole('button', { name: 'More' }).first().click()
   await b.page.getByText('Report this clip').click()
   await b.page.getByLabel('No scams, spam or fake giveaways').check()
   await b.page.getByLabel('Report details').fill('e2e: pretend this is a fake giveaway')
@@ -165,14 +171,49 @@ test('report -> admin takedown -> creator notice -> appeal -> restore', async ({
   await ap.getByRole('button', { name: 'Restore clip' }).click()
   await expect(ad.page.getByText('Done')).toBeVisible()
   await a.page.reload(); await expect(a.page.getByTestId('notice').first()).toContainText('accepted')
-  await b.page.goto(`./#/v/${clipId}`); await b.page.reload(); await expect(b.page.getByTestId('clip')).toBeVisible()
+  await b.page.goto(`./#/v/${clipId}`); await b.page.reload(); await expect(b.page.getByTestId('clip').first()).toHaveAttribute('data-id', clipId)
 
   // block: B blocks A, A's clips vanish from B's feed
-  await b.page.getByRole('button', { name: 'More' }).click()
-  await b.page.getByRole('button', { name: new RegExp('Block @' + A.user) }).click()
+  await b.page.getByRole('button', { name: 'More' }).first().click()
+  await b.page.getByRole('button', { name: new RegExp('Block @' + A.user) }).first().click()
   await expect(b.page.getByText(/You won't see their clips/)).toBeVisible()
   await b.page.goto('./#/'); await b.page.reload(); await expect(b.page.getByTestId('clip').first()).toBeVisible()
   await expect(b.page.getByTestId('feed')).not.toContainText('@' + A.user)
   await shot(b.page, '12-feed-after-block')
   await Promise.all([a.ctx.close(), b.ctx.close(), ad.ctx.close()])
+})
+
+// Which clip is on screen right now (the one under the screen centre).
+const visibleClip = (page: Page) => page.evaluate(() => {
+  const el = document.elementFromPoint(innerWidth / 2, innerHeight / 2)
+  return el?.closest('[data-testid=clip]')?.getAttribute('data-id') ?? null
+})
+// Chromium: real wheel input. Mobile WebKit in Playwright has no wheel or touch-swipe API, so there
+// we scroll the feed container programmatically (proves the snap container scrolls, not the finger gesture).
+async function swipe(page: Page, dir: 1 | -1) {
+  const h = page.viewportSize()!.height
+  if (test.info().project.name.includes('webkit')) await page.getByTestId('feed').evaluate((e, d) => e.scrollBy({ top: d, behavior: 'smooth' }), dir * h)
+  else { await page.mouse.move(100, h / 2); await page.mouse.wheel(0, dir * h) }
+  await page.waitForTimeout(1200)
+}
+async function checkSwipes(page: Page, id: string) {
+  await expect(page.getByTestId('clip').first()).toHaveAttribute('data-id', id)
+  await expect.poll(() => page.getByTestId('clip').count()).toBeGreaterThan(1)
+  expect(await visibleClip(page)).toBe(id)
+  await swipe(page, 1)
+  const next = await visibleClip(page)
+  expect(next).not.toBeNull(); expect(next).not.toBe(id)
+  await swipe(page, -1)
+  expect(await visibleClip(page)).toBe(id)
+}
+test('single clip and share link keep swiping up/down', async ({ page, browser }) => {
+  await login(page, A.email, PW)
+  const id = await page.getByTestId('clip').nth(2).getAttribute('data-id')
+  await openClip(page, id!)
+  await checkSwipes(page, id!)
+  await shot(page, '13-single-clip-swipe')
+  const { ctx, page: anon } = await fresh(browser)
+  await anon.goto(`./#/v/${id}`)
+  await checkSwipes(anon, id!)
+  await ctx.close()
 })
